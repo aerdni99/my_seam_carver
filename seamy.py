@@ -44,17 +44,28 @@ with open(sys.argv[1], 'r') as f:
                 row = row[40:]
 
 
-df = pd.DataFrame(data)
+image = pd.DataFrame(data)
+energy = pd.DataFrame(data)
+
+for x in range(height):
+    for y in range(width):
+        if x - 1 != 0:
+            e = abs(image.iloc[x, y] - image.iloc[x - 1, y])
+        if x + 1 != height:
+            e += abs(image.iloc[x, y] - image.iloc[x + 1, y])
+        if y - 1 != 0:
+            e += abs(image.iloc[x, y] - image.iloc[x, y - 1])
+        if y + 1 != width:
+            e += abs(image.iloc[x, y] - image.iloc[x, y + 1])
+        energy.iloc[x, y] = e
 
 # Write to output file
-
 with open(fname, 'w') as f:
     # @TODO let the new height and width be reflected in the new header
     # @TODO persist comments from the input file
     f.write(literal + '\n')
     f.write(str(width) + ' ' + str(height) + '\n')
     f.write(str(max_val) + '\n')
-    for index, row in df.iterrows():
+    for index, row in image.iterrows():
         row_string = ' '.join([str(elem) for elem in row])
         f.write(row_string + '\n')
-
