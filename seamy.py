@@ -45,7 +45,6 @@ with open(sys.argv[1], 'r') as f:
 
 
 df = pd.DataFrame(data)
-df = df.transpose()
 
 # Write to output file
 
