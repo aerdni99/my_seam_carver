@@ -49,7 +49,7 @@ with open(sys.argv[1], 'r') as f:
 
 image = pd.DataFrame(data)
 energy = pd.DataFrame(data)
-seamWeights = pd.DataFrame(data)
+seam_weights = pd.DataFrame(data)
 
 # Remove vertical seams
 # for seam in range(v_seams):
@@ -58,11 +58,12 @@ for seam in range(1):
     # Get the energy of each cell
     for x in range(height):
         for y in range(width):
-            if x - 1 != 0:
-                e = abs(image.iloc[x, y] - image.iloc[x - 1, y])
+            e = 0
+            if x - 1 != -1:
+                e += abs(image.iloc[x, y] - image.iloc[x - 1, y])
             if x + 1 != height:
                 e += abs(image.iloc[x, y] - image.iloc[x + 1, y])
-            if y - 1 != 0:
+            if y - 1 != -1:
                 e += abs(image.iloc[x, y] - image.iloc[x, y - 1])
             if y + 1 != width:
                 e += abs(image.iloc[x, y] - image.iloc[x, y + 1])
@@ -71,20 +72,34 @@ for seam in range(1):
     # Build path weights
     for x in range(height):
         for y in range(width):
-            seamWeights.iloc[x, y] = 0
+            seam_weights.iloc[x, y] = 0
     for x in range(height):
         for y in range(width):
-            seamWeights.iloc[x, y] += energy.iloc[x, y]
-            if x - 1 != 0:
-                if y - 1 == 0:
-                    seamWeights.iloc[x, y] += seamWeights.iloc[x - 1, [y, y + 1]].min()
+            seam_weights.iloc[x, y] += energy.iloc[x, y]
+            if x - 1 != -1:
+                if y - 1 == -1:
+                    seam_weights.iloc[x, y] += seam_weights.iloc[x - 1, [y, y + 1]].min()
                 elif y + 1 == width:
-                    seamWeights.iloc[x, y] += seamWeights.iloc[x - 1, [y - 1, y]].min()
+                    seam_weights.iloc[x, y] += seam_weights.iloc[x - 1, [y - 1, y]].min()
                 else:
-                    seamWeights.iloc[x, y] += seamWeights.iloc[x - 1, [y - 1, y + 1]].min()
+                    seam_weights.iloc[x, y] += seam_weights.iloc[x - 1, [y - 1, y + 1]].min()
+
+    print("image")
     print(image)
+    print("energy")
     print(energy)
-    print(seamWeights)
+    print("weights")
+    print(seam_weights)
+
+    # Traceback least energetic seam and remove
+    min_weight = seam_weights.iloc[height - 1, 0]
+    index = 0
+    for y in range(width):
+        if seam_weights.iloc[height - 1, y] < min_weight:
+            index = y
+            min_weight = seam_weights.iloc[height - 1, y]
+print()
+print(min_weight, index)
 
 # Write to output file
 with open(fname, 'w') as f:
