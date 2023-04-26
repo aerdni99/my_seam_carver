@@ -10,8 +10,12 @@ h_seams - number of horizontal seams to remove
 
 import pandas as pd
 import sys
+import time
+import numpy as np
 
-# Command lline arg handling
+start = time.time()
+
+# Command line arg handling
 
 v_seams = int(sys.argv[2])
 h_seams = int(sys.argv[3])
@@ -26,6 +30,7 @@ max_val = None
 
 data = []
 row = []
+
 
 # .pgm parser
 with open(sys.argv[1], 'r') as f:
@@ -43,69 +48,74 @@ with open(sys.argv[1], 'r') as f:
         else:
             # Parse the data
             row = row + list(map(int, line.split()))
-            if len(row) >= width:
-                data.append(row[:width])
-                row = row[width:]
+            if literal != 'P3':
+                if len(row) >= width:
+                    data.append(row[:width])
+                    row = row[width:]
+            else:
+                if len(row) >= width * 3:
+                    triples = [(row[i], row[i+1], row[i+2]) for i in range(0, len(row), 3)]
+                    data.append(triples[:width])
+                    row = row[width * 3:]
 
-image = pd.DataFrame(data)
+image = np.array(data)
 
 def carve(height, width, image):
-    energy = image.copy()
-    seam_weights = image.copy()
+    energy = np.zeros((height, width))
+    seam_weights = np.zeros((height, width))
 
     # Get the energy of each cell
     for x in range(height):
         for y in range(width):
             current_energy = 0
             if x - 1 != -1:
-                current_energy += abs(image.iloc[x, y] - image.iloc[x - 1, y])
+                current_energy += abs(image[x, y] - image[x - 1, y])
             if x + 1 != height:
-                current_energy += abs(image.iloc[x, y] - image.iloc[x + 1, y])
+                current_energy += abs(image[x, y] - image[x + 1, y])
             if y - 1 != -1:
-                current_energy += abs(image.iloc[x, y] - image.iloc[x, y - 1])
+                current_energy += abs(image[x, y] - image[x, y - 1])
             if y + 1 != width:
-                current_energy += abs(image.iloc[x, y] - image.iloc[x, y + 1])
-            energy.iloc[x, y] = current_energy
+                current_energy += abs(image[x, y] - image[x, y + 1])
+            energy[x, y] = current_energy
 
     # Build path weights
     for x in range(height):
         for y in range(width):
-            seam_weights.iloc[x, y] = 0
+            seam_weights[x, y] = 0
     for x in range(height):
         for y in range(width):
-            seam_weights.iloc[x, y] += energy.iloc[x, y]
+            seam_weights[x, y] += energy[x, y]
             if x - 1 != -1:
                 if y - 1 == -1:
-                    seam_weights.iloc[x, y] += seam_weights.iloc[x - 1, [y, y + 1]].min()
+                    seam_weights[x, y] += seam_weights[x - 1, [y, y + 1]].min()
                 elif y + 1 == width:
-                    seam_weights.iloc[x, y] += seam_weights.iloc[x - 1, [y - 1, y]].min()
+                    seam_weights[x, y] += seam_weights[x - 1, [y - 1, y]].min()
                 else:
-                    seam_weights.iloc[x, y] += seam_weights.iloc[x - 1, [y - 1, y + 1]].min()
+                    seam_weights[x, y] += seam_weights[x - 1, [y - 1, y + 1]].min()
 
     # Traceback least energetic seam and remove
-    min_weight = seam_weights.iloc[height - 1, 0]
+    min_weight = seam_weights[height - 1, 0]
     index = 0
     for y in range(width):
-        if seam_weights.iloc[height - 1, y] < min_weight:
+        if seam_weights[height - 1, y] < min_weight:
             index = y
-            min_weight = seam_weights.iloc[height - 1, y]
+            min_weight = seam_weights[height - 1, y]
     for y in range(width):
         if y >= index and y + 1 != width:
-            image.iloc[height - 1, y] = image.iloc[height - 1, y + 1]
+            image[height - 1, y] = image[height - 1, y + 1]
 
     for x in range(height - 1):
         path = ''
         if index - 1 != -1:
-            min_weight = seam_weights.iloc[height - 2 - x, index - 1]
+            min_weight = seam_weights[height - 2 - x, index - 1]
             path = 'left'
         else:
-            min_weight = seam_weights.iloc[height - 2 - x, index]
-            path = 'straight'
-        if seam_weights.iloc[height - 2 - x, index] < min_weight:
-            min_weight = seam_weights.iloc[height - 2 - x, index]
-            path = 'straight'
+            min_weight = seam_weights[height - 2 - x, index]
+        if seam_weights[height - 2 - x, index] < min_weight:
+            min_weight = seam_weights[height - 2 - x, index]
+            path = ''
         if index + 1 != width:
-            if seam_weights.iloc[height - 2 - x, index + 1] < min_weight:
+            if seam_weights[height - 2 - x, index + 1] < min_weight:
                 path = 'right'
         if path == 'left':
             index -= 1
@@ -113,33 +123,122 @@ def carve(height, width, image):
             index += 1
         for y in range(width):
             if y >= index and y + 1 != width:
-                image.iloc[height - 2 - x, y] = image.iloc[height - 2 - x, y + 1]
+                image[height - 2 - x, y] = image[height - 2 - x, y + 1]
     
     # Remove rightmost column
-    image = image.iloc[:, :-1]
+    image = image[:, :-1]
     return image
 
+def carve_with_color(height, width, image):
+    energy = np.zeros((height, width))
+    seam_weights = np.zeros((height, width))
 
-# Remove vertical seams
-for seam in range(v_seams):
-    image = carve(height, width, image)
-    width -= 1
+    # Get the energy of each cell
+    for x in range(height):
+        for y in range(width):
+            current_energy = 0
+            for rgb in range(3):
+                if x - 1 != -1:
+                    current_energy += abs(image[x, y, rgb] - image[x - 1, y, rgb])
+                if x + 1 != height:
+                    current_energy += abs(image[x, y, rgb] - image[x + 1, y, rgb])
+                if y - 1 != -1:
+                    current_energy += abs(image[x, y, rgb] - image[x, y - 1, rgb])
+                if y + 1 != width:
+                    current_energy += abs(image[x, y, rgb] - image[x, y + 1, rgb])
+            energy[x, y] = current_energy
 
+    # Build path weights
+    for x in range(height):
+        for y in range(width):
+            seam_weights[x, y] = 0
+    for x in range(height):
+        for y in range(width):
+            seam_weights[x, y] += energy[x, y]
+            if x - 1 != -1:
+                if y - 1 == -1:
+                    seam_weights[x, y] += seam_weights[x - 1, [y, y + 1]].min()
+                elif y + 1 == width:
+                    seam_weights[x, y] += seam_weights[x - 1, [y - 1, y]].min()
+                else:
+                    seam_weights[x, y] += seam_weights[x - 1, [y - 1, y + 1]].min()
 
-image = image.transpose()
-# Remove horizontal seams
-for seam in range(h_seams):
-    image = carve(width, height, image)
-    height -= 1
+    # Traceback least energetic seam and remove
+    min_weight = seam_weights[height - 1, 0]
+    index = 0
+    for y in range(width):
+        if seam_weights[height - 1, y] < min_weight:
+            index = y
+            min_weight = seam_weights[height - 1, y]
+    for y in range(width):
+        if y >= index and y + 1 != width:
+            image[height - 1, y] = image[height - 1, y + 1]
+
+    for x in range(height - 1):
+        path = ''
+        if index - 1 != -1:
+            min_weight = seam_weights[height - 2 - x, index - 1]
+            path = 'left'
+        else:
+            min_weight = seam_weights[height - 2 - x, index]
+        if seam_weights[height - 2 - x, index] < min_weight:
+            min_weight = seam_weights[height - 2 - x, index]
+            path = ''
+        if index + 1 != width:
+            if seam_weights[height - 2 - x, index + 1] < min_weight:
+                path = 'right'
+        if path == 'left':
+            index -= 1
+        elif path == 'right':
+            index += 1
+        for y in range(width):
+            if y >= index and y + 1 != width:
+                image[height - 2 - x, y] = image[height - 2 - x, y + 1]
+    
+    # Remove rightmost column
+    image = image[:, :-1]
+    return image
+
+if literal == 'P3':
+    fname = fname[:-3] + 'ppm'
+
+if literal != 'P3':
+    # Remove vertical seams
+    for seam in range(v_seams):
+        print("v_seam number", seam + 1)
+        image = carve(height, width, image)
+        width -= 1
+    image = image.transpose()
+    # Remove horizontal seams
+    for seam in range(h_seams):
+        print("h_seam number", seam + 1)
+        image = carve(width, height, image)
+        height -= 1
+else:
+    # Remove vertical seams
+    for seam in range(v_seams):
+        print("v_seam number", seam + 1)
+        image = carve_with_color(height, width, image)
+        width -= 1
+    image = image.transpose()
+    # Remove horizontal seams
+    for seam in range(h_seams):
+        print("h_seam number", seam + 1)
+        image = carve_with_color(width, height, image)
+        height -= 1
 
 image = image.transpose()
 # Write to output file
-with open(fname, 'w') as f:
-    # @TODO let the new height and width be reflected in the new header
-    # @TODO persist comments from the input file
-    f.write(literal + '\n')
-    f.write(str(width) + ' ' + str(height) + '\n')
-    f.write(str(max_val) + '\n')
-    for index, row in image.iterrows():
-        row_string = ' '.join([str(elem) for elem in row])
-        f.write(row_string + '\n')
+# with open(fname, 'w') as f:
+#     # @TODO persist comments from the input file
+#     f.write(literal + '\n')
+#     f.write(str(width) + ' ' + str(height) + '\n')
+#     f.write(str(max_val) + '\n')
+#     np.savetxt(f, image.astype(int), fmt='%i', delimiter=' ', newline='\n')
+
+end = time.time()
+
+total = start - end
+print()
+print("time:", total)
+print()
